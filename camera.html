@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#123b70"><title>Kamera Presensi Guru - SMP NU Ciledug</title>
+<style>
+*{box-sizing:border-box}body{margin:0;padding:20px;background:#f1f5f9;color:#172033;font-family:Arial,sans-serif}.card{max-width:520px;margin:20px auto;background:#fff;padding:22px;border-radius:18px;box-shadow:0 10px 30px #0f172a18}h1{font-size:21px;margin:0 0 6px;color:#123b70}.sub{font-size:13px;color:#64748b;margin:0 0 18px}.preview{background:#0b1728;border-radius:13px;min-height:260px;display:grid;place-items:center;overflow:hidden;color:#cbd5e1}.preview video,.preview img{display:block;width:100%;max-height:420px;object-fit:cover}.actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:14px}button{border:0;border-radius:10px;padding:12px 15px;font-weight:700;cursor:pointer;background:#2563eb;color:#fff}button.secondary{background:#eaf1fb;color:#123b70}button:disabled{opacity:.5;cursor:not-allowed}.msg{font-size:13px;line-height:1.5;margin-top:14px;padding:11px;border-radius:9px;background:#eff6ff;color:#1e40af}.error{background:#fee2e2;color:#991b1b}.ok{background:#dcfce7;color:#166534}.hint{font-size:12px;color:#64748b;line-height:1.6;margin-top:14px}
+</style>
+</head>
+<body>
+<main class="card">
+<h1>Kamera Presensi Guru</h1><p class="sub">SMP NU Ciledug · Foto selfie presensi masuk/pulang</p>
+<div class="preview" id="preview">Kamera belum diaktifkan</div>
+<div class="actions"><button id="openBtn">Aktifkan Kamera</button><button id="takeBtn" disabled>Ambil Foto</button><button class="secondary" id="retryBtn" disabled>Ulangi</button></div>
+<div class="actions"><button id="useBtn" disabled>Gunakan Foto</button></div>
+<div id="message" class="msg">Tekan Aktifkan Kamera, izinkan akses kamera, lalu ambil foto.</div>
+<p class="hint">Halaman ini hanya mengambil foto dan mengirimkannya kembali ke aplikasi presensi. Foto tidak disimpan di GitHub Pages.</p>
+</main>
+<script>
+'use strict';
+const requestId=new URLSearchParams(location.search).get('requestId');
+const $=id=>document.getElementById(id);
+let stream=null,photoData='';
+function message(text,kind=''){ $('message').className='msg '+kind; $('message').textContent=text; }
+function stop(){if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}}
+async function openCamera(){
+  try{
+    if(!navigator.mediaDevices?.getUserMedia)throw new Error('Browser tidak mendukung kamera. Pastikan halaman dibuka melalui HTTPS.');
+    stop();photoData='';$('useBtn').disabled=true;$('retryBtn').disabled=true;$('takeBtn').disabled=false;
+    stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user',width:{ideal:1280},height:{ideal:720}}});
+    $('preview').innerHTML='<video id="liveVideo" autoplay playsinline muted></video>';
+    const v=$('liveVideo');v.srcObject=stream;await v.play();message('Kamera aktif. Posisikan wajah, lalu tekan Ambil Foto.','ok');
+  }catch(e){message('Kamera tidak dapat dibuka: '+(e.message||e)+'. Periksa izin kamera browser.','error');}
+}
+function takePhoto(){
+  const v=$('liveVideo');if(!v||!v.videoWidth){message('Kamera belum siap.','error');return;}
+  const c=document.createElement('canvas'),scale=Math.min(1,1000/v.videoWidth);c.width=Math.round(v.videoWidth*scale);c.height=Math.round(v.videoHeight*scale);c.getContext('2d').drawImage(v,0,0,c.width,c.height);
+  photoData=c.toDataURL('image/jpeg',.68);stop();$('preview').innerHTML=`<img alt="Pratinjau selfie" src="${photoData}">`;
+  $('takeBtn').disabled=true;$('retryBtn').disabled=false;$('useBtn').disabled=false;message('Foto siap. Tekan Gunakan Foto untuk mengirimkannya kembali ke aplikasi presensi.','ok');
+}
+function usePhoto(){
+  if(!requestId){message('Kode permintaan tidak ditemukan. Tutup jendela ini dan buka kamera dari menu Presensi Selfie.','error');return;}
+  if(!window.opener||window.opener.closed){message('Aplikasi presensi utama tidak ditemukan. Jangan tutup tab aplikasi utama.','error');return;}
+  if(!photoData){message('Ambil foto terlebih dahulu.','error');return;}
+  try{window.opener.postMessage({type:'SMPNU_SELFIE_CAPTURED',requestId,photoData},'*');message('Foto dikirim ke aplikasi utama. Jendela ini akan ditutup.','ok');setTimeout(()=>window.close(),500);}catch(e){message('Foto gagal dikirim: '+e.message,'error');}
+}
+$('openBtn').addEventListener('click',openCamera);$('takeBtn').addEventListener('click',takePhoto);$('retryBtn').addEventListener('click',openCamera);$('useBtn').addEventListener('click',usePhoto);
+window.addEventListener('beforeunload',stop);
+if(!requestId){$('openBtn').disabled=true;message('Halaman ini harus dibuka dari tombol Buka Kamera di aplikasi presensi.','error');}
+</script>
+</body></html>
